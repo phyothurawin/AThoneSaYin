@@ -23,15 +23,13 @@ Open the live tracker in your phone's browser.
 
 ### Optional cloud sync
 
-Enable sync from **Settings → Sync** once a Supabase project is configured.
-Sign in on both devices with the same email address. On each device, open the emailed sign-in link in the browser where you requested it. For projects configured to send typed codes, enter the code in Settings instead.
-The current deployment uses Supabase's default mailer, which sends only to email addresses on the project's team.
-Choose **Import and enable sync** to copy this device's real entries and budget settings after reviewing the preview.
-**Enable sync without importing** opens the cloud ledger and keeps the device-only ledger separate.
-Sample entries are excluded from imports. Existing cloud records take priority during imports.
+Open **Settings → Sync → Create sync code** on the first device, then save the displayed code somewhere private.
+Review the import preview to choose whether to copy this device's real entries and budget settings. Sample entries are excluded and existing cloud records take priority during imports.
+On the second device, enter the same code in **Settings → Sync → Link this device**, then choose whether to import entries from that device or open the cloud ledger.
+
+Anyone who has the code can open the ledger. Keep it private, and save it before leaving the setup screen. Disconnecting returns to the device-only ledger without deleting cloud records. Reconnect with the same code.
 
 Transactions and budget fields sync individually. Edits made during a temporary connection loss are queued in the browser and retry when the tracker reconnects. If both devices change the same budget field, the last change received by the server wins.
-Signing out returns to the device-only ledger.
 
 ### Device-only mode
 
@@ -53,13 +51,12 @@ Open [http://localhost:8000/](http://localhost:8000/). The app runs without a bu
 
 ## Configure cloud sync
 
-1. Create or select a Supabase project. Run [the ledger setup SQL](supabase/schema.sql) in the project's SQL Editor.
-2. In Authentication, enable the Email provider and set the published site URL. The default passwordless email template uses a sign-in link.
-3. Fill in the project URL, **publishable key**, and published site URL in [sync-config.js](assets/js/sync-config.js). Set `emailMode` to `link` for a link-based deployment. Keep service-role keys and SMTP credentials out of this public repository.
-4. To enable typed codes on a free project, configure custom SMTP and set the **Magic Link** email template to include `{{ .Token }}` in place of the confirmation link. Then set `emailMode` to `code`. Custom SMTP also enables delivery to users outside your Supabase project team.
-5. Deploy and test on two devices with the same email. Open the cloud ledger without importing on the second device, and check that a new transaction on each device appears on the other.
+1. In the Supabase SQL Editor, run [the ledger setup SQL](supabase/schema.sql), then [the device pairing migration](supabase/pairing.sql).
+2. Enable **Allow anonymous sign-ins** under Authentication. Supabase creates a separate authenticated session for each browser without asking for an email address.
+3. Fill in the project URL and **publishable key** in [sync-config.js](assets/js/sync-config.js). Keep service-role keys out of this public repository.
+4. Deploy. Create a sync code on the first device and test linking the second device in its own browser profile.
 
-The database accepts sync requests only from the account that owns the records. The GitHub Pages site can run in device-only mode with an empty sync configuration.
+The database accepts ledger requests only from the ledger owner and devices that present its code during pairing. The website can run in device-only mode with an empty sync configuration.nly from the account that owns the records. The GitHub Pages site can run in device-only mode with an empty sync configuration.
 
 ## Project layout
 
@@ -68,9 +65,10 @@ The database accepts sync requests only from the account that owns the records. 
 | `index.html` | Page markup and external dependencies |
 | `assets/css/styles.css` | Custom typography and styles |
 | `assets/js/app.js` | Transactions, budgets, charts, CSV export, and browser storage |
-| `assets/js/sync.js` | Passwordless sign-in, local change queue, and cloud sync |
+| `assets/js/sync.js` | Device pairing, local change queue, and cloud sync |
 | `assets/js/sync-config.js` | Public Supabase connection settings |
 | `supabase/schema.sql` | Private database tables and authenticated sync function |
+| `supabase/pairing.sql` | Device pairing and scoped ledger access |
 | `manifest.webmanifest` | App name, launch URL, and home-screen install settings |
 | `assets/icons/` | PNG app icons for the launcher and home screen |
 | `.nojekyll` | Tells GitHub Pages to publish the static files directly |

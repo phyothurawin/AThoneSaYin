@@ -55,20 +55,19 @@
     const status = find('status');
     const show = (id, visible) => find(id).classList.toggle('hidden', !visible);
     const configured = Boolean(config?.url && config?.publishableKey);
-    const linkMode = config?.emailMode === 'link';
-    if (linkMode) find('send').textContent = 'Email me a sign-in link';
-
     let clientPromise;
     let session = null;
+    let linkedAccount = null;
     let activeAccount = null;
     let displayed = new Map();
-    let sentEmail = '';
+    let generatedCode = '';
     let busy = false;
     let running = false;
     let rerun = false;
     let lastOrder = 0;
     const volatileChanges = new Map();
 
+    const linkKey = device => storagePrefix + device + ':linked';
     const cacheKey = user => storagePrefix + user + ':cache';
     const outboxPrefix = user => storagePrefix + user + ':outbox:';
 
@@ -100,15 +99,12 @@
     }
 
     function renderControls() {
-      show('login', configured && !session);
-      show('join', Boolean(session && !activeAccount));
-      show('account', Boolean(session));
+      show('pair', configured && !linkedAccount);
+      show('join', Boolean(linkedAccount && !activeAccount));
+      show('account', Boolean(linkedAccount));
       show('now', Boolean(activeAccount));
-      show('verify', Boolean(sentEmail));
-      show('send', !sentEmail);
-      find('email').readOnly = Boolean(sentEmail);
-      find('code').required = Boolean(sentEmail);
-      find('email-label').textContent = session?.user.email ?? '';
+      show('generated', Boolean(generatedCode));
+      find('generated-value').value = generatedCode;
       for (const button of document.querySelectorAll('#ledger-sync button')) button.disabled = busy;
     }
 
@@ -126,13 +122,16 @@
         clientPromise = new Promise((resolve, reject) => {
           const script = document.createElement('script');
           script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.86.0/dist/umd/supabase.js';
+          const timeout = setTimeout(() => {
+            script.remove();
+            reject(new Error('Could not load sync. Check your connection and try again.'));
+          }, 12000);
           script.onload = () => {
+            clearTimeout(timeout);
             try {
-              const client = window.supabase.createClient(config.url, config.publishableKey, {
-                auth: { flowType: 'pkce' }
-              });
+              const client = window.supabase.createClient(config.url, config.publishableKey);
               client.auth.onAuthStateChange((event, nextSession) => {
-                setTimeout(() => setSession(nextSession), 0);
+                setTimeout(() => setSession(nextSession, !busy), 0);
               });
               resolve(client);
             } catch (error) {
@@ -140,6 +139,7 @@
             }
           };
           script.onerror = () => {
+            clearTimeout(timeout);
             script.remove();
             reject(new Error('Could not connect to the sign-in service.'));
           };
@@ -152,30 +152,54 @@
       return clientPromise;
     }
 
-    function setSession(nextSession) {
-      const oldUser = session?.user.id;
+    function setSession(nextSession, restore = true) {
+      const oldDevice = session?.user.id;
       session = nextSession;
-      if (oldUser === session?.user.id) return;
+      const device = session?.user.id;
+      if (oldDevice === device) return;
+      linkedAccount = null;
       if (activeAccount) {
         activeAccount = null;
         displayed = new Map();
         applyState(getLocalState());
       }
-      if (session) {
-        sentEmail = '';
-        find('code').value = '';
-        const user = session.user.id;
-        const cached = readStorage(cacheKey(user), null);
-        if (cached) {
-          activeAccount = user;
-          showRows(user, cached);
-          void sync();
+      if (device && restore) {
+        const cachedLink = readStorage(linkKey(device), null);
+        if (cachedLink) {
+          openLink(cachedLink);
         } else {
-          refreshImportPreview();
-          status.textContent = 'Signed in. Choose how to start syncing.';
+          void restoreLink(device);
         }
+      } else if (!device) {
+        generatedCode = '';
+        status.textContent = 'Entries are saved on this device. Link devices to sync.';
+      }
+      renderControls();
+    }
+
+    async function restoreLink(device) {
+      try {
+        const client = await getClient();
+        const { data, error } = await client.rpc('athone_linked_ledger');
+        if (error) throw error;
+        if (session?.user.id === device && data && !linkedAccount) openLink(data);
+      } catch {
+        if (session?.user.id === device && !busy && !linkedAccount) {
+          status.textContent = 'Could not check for a linked ledger. You can try linking with your code.';
+        }
+      }
+    }
+
+    function openLink(account) {
+      linkedAccount = account;
+      const cached = readStorage(cacheKey(account), null);
+      if (cached) {
+        activeAccount = account;
+        showRows(account, cached);
+        void sync();
       } else {
-        status.textContent = 'Entries are saved on this device. Sign in to sync.';
+        refreshImportPreview();
+        status.textContent = 'Device linked. Review what to import from this device.';
       }
       renderControls();
     }
@@ -199,7 +223,8 @@
 
     async function sync() {
       const user = activeAccount;
-      if (!user || session?.user.id !== user) return;
+      const device = session?.user.id;
+      if (!user || !device || linkedAccount !== user) return;
       if (running) {
         rerun = true;
         return;
@@ -218,7 +243,7 @@
             import_only: batch?.importOnly ?? false
           });
           if (error) throw error;
-          if (activeAccount !== user || session?.user.id !== user) return;
+          if (activeAccount !== user || session?.user.id !== device) return;
 
           // Save the server snapshot before clearing the retryable change.
           localStorage.setItem(cacheKey(user), JSON.stringify(data));
@@ -259,43 +284,65 @@
       }
     }
 
-    find('login').addEventListener('submit', event => {
-      event.preventDefault();
-      void run(async () => {
-        const client = await getClient();
-        if (!sentEmail) {
-          const email = find('email').value.trim();
-          const { error } = await client.auth.signInWithOtp({
-            email,
-            options: { emailRedirectTo: config.siteUrl || undefined }
-          });
-          if (error) throw error;
-          if (linkMode) {
-            status.textContent = 'Open the sign-in link from your email on this device, in this same browser.';
-          } else {
-            sentEmail = email;
-            status.textContent = 'Code sent. Check your email.';
-          }
-        } else {
-          const { data, error } = await client.auth.verifyOtp({
-            email: sentEmail, token: find('code').value.trim(), type: 'email'
-          });
-          if (error) throw error;
-          setSession(data.session);
-        }
-      });
-    });
+    function hex(bytes) {
+      return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
 
-    find('different-email').addEventListener('click', () => {
-      sentEmail = '';
+    async function linkDevice(code, createLedger) {
+      const normalized = code.replace(/[\s-]/g, '').toLowerCase();
+      if (!/^[a-f0-9]{32}$/.test(normalized)) {
+        throw new Error('Enter all 32 characters of the sync code.');
+      }
+      status.textContent = createLedger ? 'Creating your sync code…' : 'Linking this device…';
+      const client = await getClient();
+      const existing = await client.auth.getSession();
+      if (existing.error) throw existing.error;
+      let nextSession = existing.data.session;
+      if (!nextSession) {
+        const { data, error } = await client.auth.signInAnonymously();
+        if (error) throw error;
+        nextSession = data.session;
+      }
+      if (!nextSession) throw new Error('Could not start a device session.');
+      setSession(nextSession, false);
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+      const { data, error } = await client.rpc('athone_link_device', {
+        sync_hash: hex(new Uint8Array(digest)),
+        create_ledger: createLedger
+      });
+      if (error) throw error;
+      if (!data) throw new Error('This device could not be linked.');
+      try {
+        localStorage.setItem(linkKey(nextSession.user.id), JSON.stringify(data));
+      } catch {
+        // The server can recover the link when this device session is restored.
+      }
+      if (createLedger) generatedCode = code;
       find('code').value = '';
-      status.textContent = 'Enter your email to request a code.';
-      renderControls();
+      openLink(data);
+    }
+
+    let pendingCode = '';
+    find('create').addEventListener('click', () => void run(async () => {
+      if (!pendingCode) {
+        const random = crypto.getRandomValues(new Uint8Array(16));
+        pendingCode = hex(random).toUpperCase().match(/.{8}/g).join('-');
+      }
+      await linkDevice(pendingCode, true);
+      pendingCode = '';
+    }));
+    find('pair').addEventListener('submit', event => {
+      event.preventDefault();
+      void run(() => linkDevice(find('code').value, false));
     });
+    find('copy').addEventListener('click', () => void run(async () => {
+      await navigator.clipboard.writeText(generatedCode);
+      status.textContent = 'Sync code copied.';
+    }));
 
     function join(importLocal) {
-      const user = session?.user.id;
-      if (!user || activeAccount) return;
+      const user = linkedAccount;
+      if (!user || !session || activeAccount) return;
       localStorage.setItem(cacheKey(user), '[]');
       if (importLocal) enqueue(user, localImport(), true);
       activeAccount = user;
@@ -315,11 +362,12 @@
       const client = await getClient();
       const { error } = await client.auth.signOut({ scope: 'local' });
       if (error) throw error;
+      pendingCode = '';
       setSession(null);
     }));
 
     if (configured) {
-      status.textContent = 'Entries are saved on this device. Sign in to sync.';
+      status.textContent = 'Entries are saved on this device. Link devices to sync.';
       void getClient().catch(error => { status.textContent = error.message; });
       window.addEventListener('online', () => void sync());
       window.addEventListener('focus', () => void sync());
@@ -336,7 +384,7 @@
       isActive: () => Boolean(activeAccount),
       save(state) {
         if (!activeAccount) {
-          if (session) refreshImportPreview(state);
+          if (linkedAccount) refreshImportPreview(state);
           return false;
         }
         const next = rowsFromState(state);

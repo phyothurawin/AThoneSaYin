@@ -211,28 +211,28 @@
         <div id="ledger-sync" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
           <h2 class="text-sm font-bold text-slate-800">စက်အချင်းချင်း ချိတ်ဆက်ရန် (Sync)</h2>
           <p id="sync-status" role="status" class="text-xs text-slate-600">Cloud sync is awaiting setup. Entries are saved on this device.</p>
-          <form id="sync-login" class="hidden space-y-2">
-            <label for="sync-email" class="block text-xs font-medium text-slate-700">Email address</label>
-            <input id="sync-email" type="email" autocomplete="email" required
+          <form id="sync-pair" class="hidden space-y-2">
+            <button id="sync-create" type="button" class="w-full py-2 rounded-xl bg-emerald-700 text-white text-xs font-semibold">Create sync code</button>
+            <label for="sync-code" class="block text-xs font-medium text-slate-700">Already have a sync code?</label>
+            <input id="sync-code" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300" />
-            <button id="sync-send" type="submit" class="w-full py-2 rounded-xl bg-emerald-700 text-white text-xs font-semibold">Send sign-in code</button>
-            <div id="sync-verify" class="hidden space-y-2">
-              <label for="sync-code" class="block text-xs font-medium text-slate-700">Email sign-in code</label>
-              <input id="sync-code" type="text" inputmode="numeric" autocomplete="one-time-code"
-                class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300" />
-              <button type="submit" class="w-full py-2 rounded-xl bg-emerald-700 text-white text-xs font-semibold">Verify code</button>
-              <button id="sync-different-email" type="button" class="text-xs font-semibold text-emerald-700">Change email or request a new code</button>
-            </div>
+            <button type="submit" class="w-full py-2 rounded-xl bg-slate-100 text-slate-800 text-xs font-semibold">Link this device</button>
           </form>
+          <div id="sync-generated" class="hidden space-y-2">
+            <label for="sync-generated-value" class="block text-xs font-semibold text-slate-700">Your private sync code</label>
+            <input id="sync-generated-value" type="text" readonly
+              class="w-full px-3 py-2 font-mono text-xs rounded-xl border border-slate-300" />
+            <p class="text-xs text-slate-600">Save this code now. Anyone who has it can open your synced ledger.</p>
+            <button id="sync-copy" type="button" class="text-xs font-semibold text-emerald-700">Copy code</button>
+          </div>
           <div id="sync-join" class="hidden space-y-2">
             <p id="sync-preview" class="text-xs text-slate-600"></p>
             <button id="sync-import" type="button" class="w-full py-2 rounded-xl bg-emerald-700 text-white text-xs font-semibold">Import and enable sync</button>
             <button id="sync-cloud-only" type="button" class="w-full py-2 rounded-xl bg-slate-100 text-slate-800 text-xs font-semibold">Enable sync without importing</button>
           </div>
           <div id="sync-account" class="hidden flex flex-wrap items-center gap-3">
-            <span id="sync-email-label" class="break-all text-xs text-slate-600"></span>
             <button id="sync-now" type="button" class="hidden text-xs font-semibold text-emerald-700">Sync now</button>
-            <button id="sync-out" type="button" class="text-xs font-semibold text-slate-700">Sign out</button>
+            <button id="sync-out" type="button" class="text-xs font-semibold text-slate-700">Disconnect this device</button>
           </div>
         </div>
 
@@ -320,7 +320,7 @@
   </div>
 
   <script src="./assets/js/sync-config.js"></script>
-  <script src="./assets/js/sync.js"></script>
+  <script src="./assets/js/sync.js?v=pairing-1"></script>
   <script src="./assets/js/app.js"></script>
 </body>
 </html>
