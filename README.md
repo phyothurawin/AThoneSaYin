@@ -24,7 +24,8 @@ Open the live tracker in your phone's browser.
 ### Optional cloud sync
 
 Enable sync from **Settings → Sync** once a Supabase project is configured.
-Sign in on both devices with the same email address and enter each device's emailed code.
+Sign in on both devices with the same email address. On each device, open the emailed sign-in link in the browser where you requested it. For projects configured to send typed codes, enter the code in Settings instead.
+The current deployment uses Supabase's default mailer, which sends only to email addresses on the project's team.
 Choose **Import and enable sync** to copy this device's real entries and budget settings after reviewing the preview.
 **Enable sync without importing** opens the cloud ledger and keeps the device-only ledger separate.
 Sample entries are excluded from imports. Existing cloud records take priority during imports.
@@ -53,9 +54,9 @@ Open [http://localhost:8000/](http://localhost:8000/). The app runs without a bu
 ## Configure cloud sync
 
 1. Create or select a Supabase project. Run [the ledger setup SQL](supabase/schema.sql) in the project's SQL Editor.
-2. In Authentication, enable the Email provider and set the **Magic Link** email template to include the one-time code `{{ .Token }}`. Use a code-only message, for example `<p>Your AThoneSaYin sign-in code is {{ .Token }}.</p>`.
-3. Set the published site URL in Authentication. Configure custom SMTP for people outside your Supabase project team. Supabase's default mail service is intended for testing with team email addresses.
-4. Fill in the project URL and **publishable key** in [sync-config.js](assets/js/sync-config.js). Keep service-role keys and SMTP credentials out of this public repository.
+2. In Authentication, enable the Email provider and set the published site URL. The default passwordless email template uses a sign-in link.
+3. Fill in the project URL, **publishable key**, and published site URL in [sync-config.js](assets/js/sync-config.js). Set `emailMode` to `link` for a link-based deployment. Keep service-role keys and SMTP credentials out of this public repository.
+4. To enable typed codes on a free project, configure custom SMTP and set the **Magic Link** email template to include `{{ .Token }}` in place of the confirmation link. Then set `emailMode` to `code`. Custom SMTP also enables delivery to users outside your Supabase project team.
 5. Deploy and test on two devices with the same email. Open the cloud ledger without importing on the second device, and check that a new transaction on each device appears on the other.
 
 The database accepts sync requests only from the account that owns the records. The GitHub Pages site can run in device-only mode with an empty sync configuration.
@@ -67,7 +68,7 @@ The database accepts sync requests only from the account that owns the records. 
 | `index.html` | Page markup and external dependencies |
 | `assets/css/styles.css` | Custom typography and styles |
 | `assets/js/app.js` | Transactions, budgets, charts, CSV export, and browser storage |
-| `assets/js/sync.js` | Email sign-in, local change queue, and cloud sync |
+| `assets/js/sync.js` | Passwordless sign-in, local change queue, and cloud sync |
 | `assets/js/sync-config.js` | Public Supabase connection settings |
 | `supabase/schema.sql` | Private database tables and authenticated sync function |
 | `manifest.webmanifest` | App name, launch URL, and home-screen install settings |

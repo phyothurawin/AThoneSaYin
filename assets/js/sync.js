@@ -55,6 +55,8 @@
     const status = find('status');
     const show = (id, visible) => find(id).classList.toggle('hidden', !visible);
     const configured = Boolean(config?.url && config?.publishableKey);
+    const linkMode = config?.emailMode === 'link';
+    if (linkMode) find('send').textContent = 'Email me a sign-in link';
 
     let clientPromise;
     let session = null;
@@ -126,7 +128,9 @@
           script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.86.0/dist/umd/supabase.js';
           script.onload = () => {
             try {
-              const client = window.supabase.createClient(config.url, config.publishableKey);
+              const client = window.supabase.createClient(config.url, config.publishableKey, {
+                auth: { flowType: 'pkce' }
+              });
               client.auth.onAuthStateChange((event, nextSession) => {
                 setTimeout(() => setSession(nextSession), 0);
               });
@@ -261,10 +265,17 @@
         const client = await getClient();
         if (!sentEmail) {
           const email = find('email').value.trim();
-          const { error } = await client.auth.signInWithOtp({ email });
+          const { error } = await client.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: config.siteUrl || undefined }
+          });
           if (error) throw error;
-          sentEmail = email;
-          status.textContent = 'Code sent. Check your email.';
+          if (linkMode) {
+            status.textContent = 'Open the sign-in link from your email on this device, in this same browser.';
+          } else {
+            sentEmail = email;
+            status.textContent = 'Code sent. Check your email.';
+          }
         } else {
           const { data, error } = await client.auth.verifyOtp({
             email: sentEmail, token: find('code').value.trim(), type: 'email'
