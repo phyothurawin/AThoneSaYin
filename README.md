@@ -4,6 +4,13 @@ A Burmese-language expense and savings tracker for recording income and expenses
 
 **[Open the live tracker](https://phyothurawin.github.io/AThoneSaYin/)**
 
+## Install on your phone
+
+Open the live tracker in your phone's browser.
+
+- **Android (Chrome)** — Open the three-dot menu, choose **Install and create shortcut** (or **Add to Home screen**, depending on your Chrome version), then tap **Install**.
+- **iPhone (Safari)** — Open **Share → Add to Home Screen**, enable **Open as Web App** if shown, and tap **Add**.
+
 ## Features
 
 - Log income and expenses and filter expenses by category.
@@ -37,6 +44,8 @@ Open [http://localhost:8000/](http://localhost:8000/). The app runs without a bu
 | `index.html` | Page markup and external dependencies |
 | `assets/css/styles.css` | Custom typography and styles |
 | `assets/js/app.js` | Transactions, budgets, charts, CSV export, and browser storage |
+| `manifest.webmanifest` | App name, launch URL, and home-screen install settings |
+| `assets/icons/` | PNG app icons for the launcher and home screen |
 | `.nojekyll` | Tells GitHub Pages to publish the static files directly |
 
 GitHub Pages deploys from the root of the `main` branch. Asset links are relative so they work locally and under the `/AThoneSaYin/` project URL.
