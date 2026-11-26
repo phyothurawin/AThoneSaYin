@@ -1,0 +1,23 @@
+body {
+  font-family: 'Inter', 'Noto Sans Myanmar', system-ui, -apple-system, sans-serif;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+}
+.myanmar-text {
+  line-height: 1.6;
+}
+/* Hide scrollbar for category horizontal filter */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.tab-active {
+  color: #059669;
+}
+.tab-inactive {
+  color: #64748b;
+}
