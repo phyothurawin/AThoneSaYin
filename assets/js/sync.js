@@ -42,6 +42,18 @@
     return changes;
   }
 
+  function isConnectionFailure(error) {
+    return error?.status === 0 || /failed to fetch|fetch failed|failed to load resource|load failed|networkerror|network request failed|aborted|timed out/i.test(error?.message || '');
+  }
+
+  function connectionMessage(error, action) {
+    if (!isConnectionFailure(error)) return error;
+    const details = navigator.onLine === false
+      ? 'This device is offline. Reconnect and try again.'
+      : 'This device could not reach the sync server. Try again or switch between Wi-Fi and mobile data.';
+    return new Error(action + ' ' + details);
+  }
+
   function readStorage(key, fallback) {
     try {
       return JSON.parse(localStorage.getItem(key)) ?? fallback;
@@ -259,6 +271,9 @@
           status.textContent = volatileChanges.size
             ? 'Changes are waiting to sync. Keep this tab open because this browser could not save the queue.'
             : 'Sync unavailable. Changes saved on this device will retry when you reconnect.';
+          if (isConnectionFailure(error) && !volatileChanges.size && navigator.onLine !== false) {
+            status.textContent = 'This device could not reach the sync server. Changes are saved on this device. Try another connection or tap Sync now to retry.';
+          }
           console.warn('Ledger sync failed', error.message);
         }
       } finally {
@@ -295,22 +310,47 @@
       }
       status.textContent = createLedger ? 'Creating your sync code…' : 'Linking this device…';
       const client = await getClient();
-      const existing = await client.auth.getSession();
-      if (existing.error) throw existing.error;
-      let nextSession = existing.data.session;
-      if (!nextSession) {
-        const { data, error } = await client.auth.signInAnonymously();
-        if (error) throw error;
-        nextSession = data.session;
+      let nextSession;
+      try {
+        const existing = await client.auth.getSession();
+        if (existing.error) throw existing.error;
+        nextSession = existing.data.session;
+        if (!nextSession) {
+          const { data, error } = await client.auth.signInAnonymously();
+          if (error) throw error;
+          nextSession = data.session;
+        }
+      } catch (error) {
+        throw connectionMessage(error, 'Could not start a device session.');
       }
       if (!nextSession) throw new Error('Could not start a device session.');
       setSession(nextSession, false);
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
-      const { data, error } = await client.rpc('athone_link_device', {
+      const params = {
         sync_hash: hex(new Uint8Array(digest)),
         create_ledger: createLedger
-      });
-      if (error) throw error;
+      };
+      const sendLink = async () => {
+        const result = await client.rpc('athone_link_device', params);
+        if (result.error) throw result.error;
+        return result.data;
+      };
+      let data;
+      try {
+        data = await sendLink();
+      } catch (error) {
+        if (!isConnectionFailure(error) || navigator.onLine === false) {
+          throw connectionMessage(error, 'Could not pair this device.');
+        }
+        // Repeating the same pairing request is safe even if the first response was lost.
+        status.textContent = 'The connection dropped. Retrying with the same sync code…';
+        await new Promise(resolve => setTimeout(resolve, 600));
+        try {
+          data = await sendLink();
+        } catch (retryError) {
+          throw connectionMessage(retryError, 'Could not pair this device.');
+        }
+      }
       if (!data) throw new Error('This device could not be linked.');
       try {
         localStorage.setItem(linkKey(nextSession.user.id), JSON.stringify(data));
