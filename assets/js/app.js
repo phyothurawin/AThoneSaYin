@@ -72,6 +72,7 @@
   }
 
   function saveState() {
+    if (ledgerSync.save(state)) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { /* ignore storage errors */ }
@@ -88,6 +89,15 @@
   let pendingConfirmAction = null;
 
   // Helpers
+  function newEntryId(prefix) {
+    return prefix + '_' + (window.crypto?.randomUUID?.() || Date.now() + '_' + Math.random().toString(36).slice(2));
+  }
+
+  function escapeHtml(value) {
+    const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(value ?? '').replace(/[&<>"']/g, character => entities[character]);
+  }
+
   function formatMoney(val) {
     const num = Math.round(Number(val) || 0);
     const formatted = num.toLocaleString('en-US');
@@ -124,7 +134,7 @@
   function getCategoryTotals(expenses) {
     const totals = Object.fromEntries(CATEGORIES.map(c => [c.id, 0]));
     for (const e of expenses) {
-      if (totals[e.category] !== undefined) {
+      if (Object.hasOwn(totals, e.category)) {
         totals[e.category] += Number(e.amount) || 0;
       }
     }
@@ -280,19 +290,19 @@
               </div>
               <div class="min-w-0">
                 <p class="text-xs font-bold text-emerald-900 truncate">ဝင်ငွေ (Income)</p>
-                <p class="text-[11px] text-emerald-700 truncate">${item.source ? item.source : 'Income'} • ${item.date}</p>
+                <p class="text-[11px] text-emerald-700 truncate">${escapeHtml(item.source || 'Income')} • ${escapeHtml(item.date)}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
               <span class="text-sm font-bold text-emerald-700">+${formatMoney(item.amount)}</span>
-              <button type="button" data-delete-income-id="${item.id}" aria-label="Delete income" class="p-1.5 text-emerald-500 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition">
+              <button type="button" data-delete-income-id="${escapeHtml(item.id)}" aria-label="Delete income" class="p-1.5 text-emerald-500 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </button>
             </div>
           </div>
         `;
       }
-      const cat = catMap[item.category] || CATEGORIES[0];
+      const cat = Object.hasOwn(catMap, item.category) ? catMap[item.category] : CATEGORIES[0];
       return `
         <div class="bg-white rounded-xl border border-slate-200 px-3.5 py-3 flex items-center justify-between gap-3 shadow-2xs">
           <div class="flex items-center gap-3 min-w-0">
@@ -301,12 +311,12 @@
             </div>
             <div class="min-w-0">
               <p class="text-xs font-bold text-slate-800 truncate">${cat.mm}</p>
-              <p class="text-[11px] text-slate-500 truncate">${item.note ? item.note : cat.en} • ${item.date}</p>
+              <p class="text-[11px] text-slate-500 truncate">${escapeHtml(item.note || cat.en)} • ${escapeHtml(item.date)}</p>
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <span class="text-sm font-bold text-slate-900">${formatMoney(item.amount)}</span>
-            <button type="button" data-delete-id="${item.id}" aria-label="Delete entry" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition">
+            <button type="button" data-delete-id="${escapeHtml(item.id)}" aria-label="Delete entry" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
           </div>
@@ -645,7 +655,7 @@
     }
     const dateVal = dateEl.value || `${selectedMonth}-01`;
     state.expenses.unshift({
-      id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      id: newEntryId('exp'),
       date: dateVal,
       category: selectedCategory,
       amount,
@@ -684,7 +694,7 @@
     const dateVal = dateEl.value || `${selectedMonth}-01`;
     if (!Array.isArray(state.incomes)) state.incomes = [];
     state.incomes.unshift({
-      id: 'inc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      id: newEntryId('inc'),
       date: dateVal,
       amount,
       source: sourceEl.value.trim() || 'Income (ဝင်ငွေ)'
@@ -802,7 +812,8 @@
   });
 
   document.getElementById('btn-clear-data').addEventListener('click', () => {
-    openConfirm('Clear All Entries?', 'All logged expenses and income will be permanently removed.', () => {
+    const scope = ledgerSync.isActive() ? ' from your synced account' : ' from this device';
+    openConfirm('Clear All Entries?', 'All logged expenses and income will be permanently removed' + scope + '.', () => {
       state.expenses = [];
       state.incomes = [];
       saveState();
@@ -815,6 +826,34 @@
   document.getElementById('modal-confirm').addEventListener('click', () => {
     if (pendingConfirmAction) pendingConfirmAction();
     closeConfirm();
+  });
+
+  const sampleData = getSampleData();
+  const sampleIds = new Set([
+    ...sampleData.expenses.map(entry => 'expense:' + entry.id),
+    ...sampleData.incomes.map(entry => 'income:' + entry.id)
+  ]);
+  const ledgerSync = window.createLedgerSync({
+    getLocalState: loadState,
+    getDefaults: () => ({ ...getSampleData(), expenses: [], incomes: [] }),
+    sampleIds,
+    applyState(next) {
+      const drafts = new Map();
+      if (currentTab === 'settings') {
+        const trackDraft = (input, saved) => {
+          if (input.value !== String(saved)) drafts.set(input.id, input.value);
+        };
+        trackDraft(document.getElementById('setting-currency'), state.currency);
+        trackDraft(document.getElementById('setting-monthly-budget'), state.monthlyBudget);
+        document.querySelectorAll('[data-cap-id]').forEach(input => {
+          trackDraft(input, state.categoryBudgets[input.dataset.capId]);
+        });
+      }
+      state = next;
+      document.getElementById('btn-load-demo').classList.toggle('hidden', ledgerSync.isActive());
+      renderAll();
+      for (const [id, value] of drafts) document.getElementById(id).value = value;
+    }
   });
 
   renderAll();
